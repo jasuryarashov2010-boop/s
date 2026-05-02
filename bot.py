@@ -57,11 +57,14 @@ class Assets:
     ICO_BACK = "⬅️ Orqaga"
     ICO_HOME = "🏠 Asosiy Menyu"
 
-    ADM_ADD_TEST = "➕ Yangi Test Qo'shish"
-    ADM_ADD_DAILY = "➕ Kunlik Test Qo'shish"
-    ADM_DETAILED_STATS = "📋 Batafsil Statistika  (testlar uchun)" 
-    ADM_DAILY_STATS = "📊 Kunlik Statistika"
-    ADM_DEL_TEST = "🗑 Testni O'chirish"
+    ADM_STATS = "📊 Statistika"
+    ADM_DETAILED_STATS = "📋 Batafsil Statistika"
+    ADM_DAILY_STATS = "📅 Kunlik Statistika"
+    ADM_ADD_TEST = "➕ Test Qo'shish"
+    ADM_ADD_DAILY = "🆕 Kunlik Test"
+    ADM_DEL_TEST = "🗑 Test O'chirish"
+    ICO_HOME = "🏠 Asosiy Menyu"
+    ICO_BACK = "⬅️ Orqaga"
 
     @staticmethod
     def progress_bar(perc: float) -> str:
