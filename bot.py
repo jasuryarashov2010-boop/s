@@ -59,7 +59,7 @@ class Assets:
 
     ADM_ADD_TEST = "➕ Yangi Test Qo'shish"
     ADM_ADD_DAILY = "➕ Kunlik Test Qo'shish"
-    ADM_STATS = "📊 Umumiy Statistika"
+    ADM_DETAILED_STATS = "📋 Batafsil Statistika  (testlar uchun)" 
     ADM_DAILY_STATS = "📊 Kunlik Statistika"
     ADM_DEL_TEST = "🗑 Testni O'chirish"
 
@@ -208,13 +208,23 @@ class UI:
         return b.as_markup(resize_keyboard=True)
 
     @staticmethod
+   @staticmethod
     def admin_menu():
         b = ReplyKeyboardBuilder()
+        # Birinchi qator: Test qo'shish tugmalari
         b.row(KeyboardButton(text=Assets.ADM_ADD_TEST), KeyboardButton(text=Assets.ADM_ADD_DAILY))
-        b.row(KeyboardButton(text=Assets.ADM_STATS), KeyboardButton(text=Assets.ADM_DAILY_STATS))
-        b.row(KeyboardButton(text=Assets.ADM_DEL_TEST))
+        
+        # Ikkinchi qator: Umumiy va Batafsil statistika (Yangi tugma shu yerda)
+        b.row(KeyboardButton(text=Assets.ADM_STATS), KeyboardButton(text=Assets.ADM_DETAILED_STATS))
+        
+        # Uchinchi qator: Kunlik statistika va O'chirish
+        b.row(KeyboardButton(text=Assets.ADM_DAILY_STATS), KeyboardButton(text=Assets.ADM_DEL_TEST))
+        
+        # To'rtinchi qator: Asosiy menyu
         b.row(KeyboardButton(text=Assets.ICO_HOME))
-        b.adjust(2, 2, 1, 1)
+        
+        # Tugmalarni chiroyli joylashtirish (2 tadan 3 qator va oxirida 1 ta)
+        b.adjust(2, 2, 2, 1)
         return b.as_markup(resize_keyboard=True)
 
     @staticmethod
@@ -223,7 +233,6 @@ class UI:
             keyboard=[[KeyboardButton(text=Assets.ICO_BACK)]],
             resize_keyboard=True
         )
-
 
 # ==========================================================================================
 # HELPERS
@@ -949,6 +958,11 @@ async def confirm_del(call: CallbackQuery):
     await call.message.edit_text(f"🏁 <b>{kod}</b> kodli test tizimdan o'chirildi.")
 
 
+# ==========================================================================================
+# 📊 STATISTIKA BO'LIMI (YANGILANGAN)
+# ==========================================================================================
+
+# 1. Umumiy qisqacha statistika (Sizdagi eski kodning ixcham varianti)
 @dp.message(F.text == Assets.ADM_STATS)
 async def adm_general_stats(message: Message):
     if message.from_user.id != Assets.ADMIN_ID:
@@ -963,11 +977,85 @@ async def adm_general_stats(message: Message):
         f"👥 Foydalanuvchilar: <b>{u_count} ta</b>\n"
         f"📚 Jami testlar: <b>{t_count} ta</b>\n"
         f"📝 Jami topshirilganlar: <b>{r_count} ta</b>\n"
-        f"{Assets.S_LINE}"
+        f"{Assets.S_LINE}\n"
+        f"<i>Batafsil ma'lumot uchun 'Batafsil Statistika' tugmasidan foydalaning.</i>"
     )
     await message.answer(res_text, parse_mode="HTML")
 
+# 2. Barcha testlar ro'yxatini chiqarish (Hamma odamlarnikini ko'rish uchun boshlanish nuqtasi)
+@dp.message(F.text == Assets.ADM_DETAILED_STATS)
+async def adm_detailed_stats_list(message: Message):
+    if message.from_user.id != Assets.ADMIN_ID:
+        return
 
+    tests = DB.run("SELECT kod, title FROM tests ORDER BY created_at DESC", fetch="all")
+    if not tests:
+        return await message.answer("📂 <b>Tizimda testlar mavjud emas.</b>", parse_mode="HTML")
+
+    kb = InlineKeyboardBuilder()
+    for t in tests:
+        kb.row(InlineKeyboardButton(
+            text=f"📊 {t['kod']} | {t['title']}",
+            callback_data=f"detail_{t['kod']}"
+        ))
+
+    await message.answer(
+        f"🔍 <b>BATAFSIL STATISTIKA</b>\n"
+        f"Natijalarini ko'rmoqchi bo'lgan testingizni tanlang 👇",
+        reply_markup=kb.as_markup(),
+        parse_mode="HTML"
+    )
+
+# 3. Tanlangan test bo'yicha HAMMA foydalanuvchilar natijasini chiqarish
+@dp.callback_query(F.data.startswith("detail_"))
+async def adm_test_results_callback(call: CallbackQuery):
+    if call.from_user.id != Assets.ADMIN_ID:
+        return await call.answer("Ruxsat yo'q", show_alert=True)
+
+    kod = call.data.split("_", 1)[1]
+    
+    # Ma'lumotlar bazasidan ushbu testni ishlagan BARCHA foydalanuvchilarni olish
+    results = DB.run(
+        """
+        SELECT u.fullname, r.ball, r.total, r.perc, r.timestamp 
+        FROM results r 
+        JOIN users u ON r.uid = u.uid 
+        WHERE r.kod = ? 
+        ORDER BY r.perc DESC, r.timestamp ASC
+        """, 
+        (kod,), 
+        fetch="all"
+    )
+
+    test_info = DB.run("SELECT title FROM tests WHERE kod=?", (kod,), fetch="one")
+    title = test_info['title'] if test_info else "Noma'lum test"
+
+    if not results:
+        return await call.message.edit_text(
+            f"❌ <b>{kod}</b> kodli test bo'yicha hali natijalar mavjud emas.",
+            parse_mode="HTML"
+        )
+
+    text = (
+        f"📊 <b>TEST NATIJALARI: {kod}</b>\n"
+        f"📖 Fan: <b>{escape(title)}</b>\n"
+        f"{Assets.D_LINE}\n\n"
+    )
+
+    for i, r in enumerate(results, 1):
+        icon = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "🔹"
+        text += (
+            f"{icon} <b>{escape(r['fullname'])}</b>\n"
+            f"└ 🎯 Ball: <b>{r['ball']}/{r['total']}</b> (<b>{r['perc']:.1f}%</b>)\n"
+            f"└ 🕒 Vaqt: <i>{r['timestamp'][:16]}</i>\n"
+            f"{Assets.S_LINE}\n"
+        )
+
+    if len(text) > 4000:
+        text = text[:4000] + "\n<i>...natijalar juda ko'p.</i>"
+
+    await call.message.edit_text(text, parse_mode="HTML")
+    await call.answer()
 @dp.message(F.text == Assets.ADM_DAILY_STATS)
 async def adm_daily_stats(message: Message):
     if message.from_user.id != Assets.ADMIN_ID:
