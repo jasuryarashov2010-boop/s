@@ -202,35 +202,30 @@ class Form(StatesGroup):
 # ==========================================================================================
 class UI:
     @staticmethod
-    def main_menu():
+    def main_menu(user_id: int = 0): # user_id qabul qiladigan qildik
         b = ReplyKeyboardBuilder()
-        # Birinchi qator: Testlar va Topshirish
+        # 1-qator
         b.row(KeyboardButton(text=Assets.ICO_TEST), KeyboardButton(text=Assets.ICO_CHECK))
-        # Ikkinchi qator: Kunlik test va AI Mentor
+        # 2-qator
         b.row(KeyboardButton(text=Assets.ICO_DAILY), KeyboardButton(text=Assets.ICO_AI))
-        # Uchinchi qator: Natijalar va Shaxsiy kabinet
+        # 3-qator
         b.row(KeyboardButton(text=Assets.ICO_HIS), KeyboardButton(text=Assets.ICO_PROF))
-        # To'rtinchi qator: Yordam
+        # 4-qator
         b.row(KeyboardButton(text=Assets.ICO_HELP))
         
-        b.adjust(2, 2, 2, 1)
-        return b.as_markup(resize_keyboard=True)
-
-    @staticmethod
-    def admin_menu():
-        b = ReplyKeyboardBuilder()
-        # 1-qator: Test qo'shish funksiyalari
-        b.row(KeyboardButton(text=Assets.ADM_ADD_TEST), KeyboardButton(text=Assets.ADM_ADD_DAILY))
-        # 2-qator: Umumiy va Batafsil statistika (YANGI)
-        b.row(KeyboardButton(text=Assets.ADM_STATS), KeyboardButton(text=Assets.ADM_DETAILED_STATS))
-        # 3-qator: Kunlik statistika va O'chirish
-        b.row(KeyboardButton(text=Assets.ADM_DAILY_STATS), KeyboardButton(text=Assets.ADM_DEL_TEST))
-        # 4-qator: Uyga qaytish
-        b.row(KeyboardButton(text=Assets.ICO_HOME))
+        # AGAR FOYDALANUVCHI ADMIN BO'LSA, ADMIN TUGMASINI QO'SHISH
+        if user_id == Assets.ADMIN_ID:
+            b.row(KeyboardButton(text=Assets.ICO_ADM))
         
-        b.adjust(2, 2, 2, 1)
+        # Tugmalarni moslashtirish (2 tadan qatorlar, oxirida 1 tadan)
+        if user_id == Assets.ADMIN_ID:
+            b.adjust(2, 2, 2, 1, 1)
+        else:
+            b.adjust(2, 2, 2, 1)
+            
         return b.as_markup(resize_keyboard=True)
 
+    # Qolgan funksiyalar (admin_menu, back_btn) o'zgarishsiz qoladi...
     @staticmethod
     def back_btn():
         # Bu qismda ReplyKeyboardMarkup import qilingan bo'lishi kerak
