@@ -196,34 +196,23 @@ class Form(StatesGroup):
 # ==========================================================================================
 class UI:
     @staticmethod
-    def main_menu(user_id: int):
+    def main_menu():
         b = ReplyKeyboardBuilder()
-        b.row(KeyboardButton(text=Assets.ICO_TEST), KeyboardButton(text=Assets.ICO_CHECK))
-        b.row(KeyboardButton(text=Assets.ICO_DAILY), KeyboardButton(text=Assets.ICO_AI))
-        b.row(KeyboardButton(text=Assets.ICO_HIS), KeyboardButton(text=Assets.ICO_PROF))
-        b.row(KeyboardButton(text=Assets.ICO_HELP))
-        if user_id == Assets.ADMIN_ID:
-            b.row(KeyboardButton(text=Assets.ICO_ADM))
-        b.adjust(2, 2, 2, 1)
+        # ... (bu yerdagi mavjud kodlaringiz)
         return b.as_markup(resize_keyboard=True)
 
     @staticmethod
-   @staticmethod
     def admin_menu():
         b = ReplyKeyboardBuilder()
-        # Birinchi qator: Test qo'shish tugmalari
+        # Birinchi qator
         b.row(KeyboardButton(text=Assets.ADM_ADD_TEST), KeyboardButton(text=Assets.ADM_ADD_DAILY))
-        
-        # Ikkinchi qator: Umumiy va Batafsil statistika (Yangi tugma shu yerda)
+        # Ikkinchi qator (Yangi tugma bilan)
         b.row(KeyboardButton(text=Assets.ADM_STATS), KeyboardButton(text=Assets.ADM_DETAILED_STATS))
-        
-        # Uchinchi qator: Kunlik statistika va O'chirish
+        # Uchinchi qator
         b.row(KeyboardButton(text=Assets.ADM_DAILY_STATS), KeyboardButton(text=Assets.ADM_DEL_TEST))
-        
-        # To'rtinchi qator: Asosiy menyu
+        # To'rtinchi qator
         b.row(KeyboardButton(text=Assets.ICO_HOME))
         
-        # Tugmalarni chiroyli joylashtirish (2 tadan 3 qator va oxirida 1 ta)
         b.adjust(2, 2, 2, 1)
         return b.as_markup(resize_keyboard=True)
 
@@ -233,7 +222,6 @@ class UI:
             keyboard=[[KeyboardButton(text=Assets.ICO_BACK)]],
             resize_keyboard=True
         )
-
 # ==========================================================================================
 # HELPERS
 # ==========================================================================================
