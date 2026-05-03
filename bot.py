@@ -62,14 +62,14 @@ class Assets:
     ADM_STATS = "📊 Umumiy Statistika"
     ADM_DAILY_STATS = "📊 Kunlik Statistika"
     ADM_DEL_TEST = "🗑 Testni O'chirish"
-
+    ADM_BROADCAST = "📢 Barchaga Xabar"
     @staticmethod
     def progress_bar(perc: float) -> str:
         full = max(0, min(10, int(perc // 10)))
         empty = 10 - full
         return "🟢" * full + "⚪" * empty
 
-
+adm_broadcast = State()
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=Assets.TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
@@ -209,14 +209,14 @@ class UI:
 
     @staticmethod
     def admin_menu():
+        
         b = ReplyKeyboardBuilder()
         b.row(KeyboardButton(text=Assets.ADM_ADD_TEST), KeyboardButton(text=Assets.ADM_ADD_DAILY))
         b.row(KeyboardButton(text=Assets.ADM_STATS), KeyboardButton(text=Assets.ADM_DAILY_STATS))
-        b.row(KeyboardButton(text=Assets.ADM_DEL_TEST))
+        b.row(KeyboardButton(text=Assets.ADM_DEL_TEST), KeyboardButton(text=Assets.ADM_BROADCAST)) # <-- SHU YERGA QO'SHILDI
         b.row(KeyboardButton(text=Assets.ICO_HOME))
-        b.adjust(2, 2, 1, 1)
+        b.adjust(2, 2, 2, 1)
         return b.as_markup(resize_keyboard=True)
-
     @staticmethod
     def back_btn():
         return ReplyKeyboardMarkup(
@@ -1067,7 +1067,150 @@ async def adm_back_to_main_stats(call: CallbackQuery):
     text, markup = await get_stats_main_menu()
     await call.message.edit_text(text, reply_markup=markup, parse_mode="HTML")
     await call.answer()
+    @dp.message(Form.adm_daily_test)
+async def adm_save_daily(message: Message, state: FSMContext):
+    if message.from_user.id != Assets.ADMIN_ID:
+        return
 
+    # Kirish formatini tekshirish (Masalan: Test nomi # a#b#c)
+    if "#" not in message.text:
+        return await message.answer("❌ Format noto'g'ri!\nNamuna: <code>Matematika # a#b#c</code>", parse_mode="HTML")
+
+    parts = message.text.split("#")
+    title = parts[0].strip()
+    answers = "#".join(parts[1:]).strip().lower()
+
+    # --- MUHIM: ESKI NATIJALARNI O'CHIRISH ---
+    # Yangi kunlik test qo'shilayotgani uchun 'daily' kodli barcha natijalarni bazadan o'chiramiz
+    DB.run("DELETE FROM results WHERE kod = 'daily'")
+    
+    # Eskidan qolgan daily testning o'zini ham yangilaymiz
+    DB.run("DELETE FROM tests WHERE kod = 'daily'")
+    DB.run(
+        "INSERT INTO tests (kod, title, javoblar, created_at) VALUES (?, ?, ?, ?)",
+        ("daily", title, answers, datetime.now().isoformat())
+    )
+
+    await state.clear()
+    await message.answer(
+        f"✅ <b>Kunlik test muvaffaqiyatli yangilandi!</b>\n"
+        f"{Assets.D_LINE}\n"
+        f"📖 Fan: <b>{title}</b>\n"
+        f"🗑 <b>Eski statistika tozalab tashlandi.</b>\n"
+        f"🚀 Endi foydalanuvchilar yangi testni ishlashlari mumkin.", 
+        reply_markup=UI.admin_menu(), 
+        parse_mode="HTML"
+    )
+    @dp.message(F.text == Assets.ADM_DAILY_STATS)
+async def adm_daily_stats_view(message: Message):
+    if message.from_user.id != Assets.ADMIN_ID: return
+
+    results = DB.run(
+        """
+        SELECT u.fullname, r.ball, r.total, r.perc, r.timestamp 
+        FROM results r 
+        JOIN users u ON r.uid = u.uid 
+        WHERE r.kod = 'daily' 
+        ORDER BY r.perc DESC, r.timestamp ASC
+        """, fetch="all"
+    )
+
+    text = (
+        f"📅 <b>KUNLIK TEST REYTINGI (HOZIRGI)</b>\n"
+        f"{Assets.D_LINE}\n"
+    )
+
+    if not results:
+        text += "<i>📭 Hozircha yangi test natijalari yo'q.</i>"
+    else:
+        text += f"👥 Jami ishlaganlar: <b>{len(results)} ta</b>\n\n"
+        for i, r in enumerate(results, 1):
+            icon = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "🔹"
+            text += (
+                f"{icon} <b>{escape(r['fullname'])}</b>\n"
+                f"   └ 🎯 Natija: <b>{r['ball']}/{r['total']}</b> (<b>{r['perc']:.1f}%</b>)\n"
+            )
+
+    await message.answer(text, parse_mode="HTML")
+# ==========================================================================================
+# 📢 OMMAVIY XABAR YUBORISH (BROADCAST)
+# ==========================================================================================
+@dp.message(F.text == Assets.ADM_BROADCAST)
+async def broadcast_start(message: Message, state: FSMContext):
+    if message.from_user.id != Assets.ADMIN_ID:
+        return
+        
+    await state.set_state(Form.adm_broadcast)
+    await message.answer(
+        f"<b>{Assets.S_LINE}</b>\n"
+        f"📢 <b>OMMAVIY XABAR YUBORISH</b>\n"
+        f"<b>{Assets.S_LINE}</b>\n\n"
+        f"Barcha foydalanuvchilarga yubormoqchi bo'lgan xabaringizni kiriting.\n"
+        f"<i>💡 Matn, rasm, video yoki hujjat yuborishingiz mumkin. Xabar siz yuborgan formatda hammaga boradi.</i>",
+        reply_markup=UI.back_btn(),
+        parse_mode="HTML"
+    )
+
+@dp.message(Form.adm_broadcast)
+async def broadcast_send(message: Message, state: FSMContext):
+    if message.from_user.id != Assets.ADMIN_ID:
+        return
+
+    # Bekor qilish tugmasi bosilsa
+    if message.text == Assets.ICO_BACK:
+        await state.clear()
+        return await message.answer("🚫 Xabar yuborish bekor qilindi.", reply_markup=UI.admin_menu())
+
+    users = DB.run("SELECT uid FROM users", fetch="all")
+    if not users:
+        await state.clear()
+        return await message.answer("📭 Tizimda foydalanuvchilar yo'q.", reply_markup=UI.admin_menu())
+
+    wait_msg = await message.answer("⏳ <i>Xabar yuborilmoqda, iltimos kutib turing...</i>")
+    
+    success = 0
+    fail = 0
+
+    for u in users:
+        try:
+            user_id = u['uid']
+            
+            # Agar faqat matn yozilgan bo'lsa, chiroyli dizaynga o'raymiz
+            if message.text:
+                text = (
+                    f"🔔 <b>ADMINISTRATSIYADAN XABAR</b>\n"
+                    f"{Assets.D_LINE}\n"
+                    f"{message.html_text}\n"
+                    f"{Assets.D_LINE}\n"
+                    f"<i>🤖 Logos Platinum tizimi</i>"
+                )
+                await bot.send_message(user_id, text, parse_mode="HTML")
+            else:
+                # Agar rasm/video yuborilsa, uni shundayligicha (dizaynsiz) copy qilamiz
+                await message.copy_to(user_id)
+                
+            success += 1
+        except Exception:
+            # Foydalanuvchi botni bloklagan bo'lsa xatolik beradi, shu sababli fail oshadi
+            fail += 1
+            
+        # Telegram API ni charchatib qo'ymaslik uchun kichik pauza (Anti-flood)
+        await asyncio.sleep(0.05)
+
+    await state.clear()
+    
+    # Natijani hisobot shaklida adminga qaytarish
+    report = (
+        f"✅ <b>XABAR YETKAZILDI!</b>\n"
+        f"{Assets.S_LINE}\n"
+        f"👥 Jami urunishlar: <b>{len(users)} ta</b>\n"
+        f"🟢 Yetib bordi: <b>{success} ta</b>\n"
+        f"🔴 Bloklagan/Aktiv emas: <b>{fail} ta</b>\n"
+        f"{Assets.S_LINE}"
+    )
+    
+    await wait_msg.delete()
+    await message.answer(report, reply_markup=UI.admin_menu(), parse_mode="HTML")
 # ==========================================================================================
 # MAIN
 # ==========================================================================================
