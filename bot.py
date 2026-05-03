@@ -949,11 +949,11 @@ async def confirm_del(call: CallbackQuery):
     await call.message.edit_text(f"🏁 <b>{kod}</b> kodli test tizimdan o'chirildi.")
 
 # ==========================================================================================
-# 📊 KENGAYTIRILGAN UMUMIY STATISTIKA (YANGILANGAN DIZAYN)
+# 📊 1. UMUMIY STATISTIKA (BATAFSIL REYTING BILAN)
 # ==========================================================================================
 
 async def get_stats_main_menu():
-    """Umumiy statistika va testlar ro'yxatini shakllantiruvchi yordamchi funksiya"""
+    """Admin uchun asosiy statistika menyusi va testlar ro'yxati"""
     u_count = DB.run("SELECT COUNT(*) as c FROM users", fetch="one")["c"]
     t_count = DB.run("SELECT COUNT(*) as c FROM tests", fetch="one")["c"]
     r_count = DB.run("SELECT COUNT(*) as c FROM results", fetch="one")["c"]
@@ -965,18 +965,16 @@ async def get_stats_main_menu():
         f"📚 Jami bazadagi testlar: <b>{t_count} ta</b>\n"
         f"📝 Jami topshirilgan testlar: <b>{r_count} marta</b>\n"
         f"{Assets.S_LINE}\n"
-        f"🎯 <b>Batafsil ma'lumot olish:</b>\n"
-        f"<i>Qaysi test bo'yicha ishlaganlar ro'yxatini ko'rmoqchisiz? "
-        f"Quyidagi ro'yxatdan kerakli testni tanlang 👇</i>"
+        f"🎯 <b>Batafsil ma'lumot olish uchun testni tanlang:</b>"
     )
 
-    tests = DB.run("SELECT kod, title FROM tests ORDER BY created_at DESC", fetch="all")
+    tests = DB.run("SELECT kod, title FROM tests WHERE kod != 'daily' ORDER BY created_at DESC", fetch="all")
     kb = InlineKeyboardBuilder()
     
     if tests:
         for t in tests:
             kb.row(InlineKeyboardButton(
-                text=f"📂 {t['title']} | Kod: {t['kod']}",
+                text=f"📂 {t['title']} (Kod: {t['kod']})",
                 callback_data=f"show_stats_{t['kod']}"
             ))
     else:
@@ -984,15 +982,12 @@ async def get_stats_main_menu():
         
     return res_text, kb.as_markup()
 
-
 @dp.message(F.text == Assets.ADM_STATS)
 async def adm_general_stats(message: Message):
     if message.from_user.id != Assets.ADMIN_ID:
         return
-    
     text, markup = await get_stats_main_menu()
     await message.answer(text, reply_markup=markup, parse_mode="HTML")
-
 
 @dp.callback_query(F.data.startswith("show_stats_"))
 async def adm_specific_test_stats(call: CallbackQuery):
@@ -1000,13 +995,11 @@ async def adm_specific_test_stats(call: CallbackQuery):
         return await call.answer("Ruxsat yo'q", show_alert=True)
 
     kod = call.data.split("_", 2)[2]
-    
-    # Test haqida ma'lumot olish
     test = DB.run("SELECT title, javoblar FROM tests WHERE kod=?", (kod,), fetch="one")
+    
     if not test:
-        return await call.answer("Bunday kodli test topilmadi!", show_alert=True)
+        return await call.answer("Test topilmadi!", show_alert=True)
 
-    # Shu testni ishlaganlarni topish (Eng baland foiz va eng birinchi ishlaganiga qarab saralash)
     results = DB.run(
         """
         SELECT u.fullname, r.ball, r.total, r.perc, r.timestamp 
@@ -1014,95 +1007,38 @@ async def adm_specific_test_stats(call: CallbackQuery):
         JOIN users u ON r.uid = u.uid 
         WHERE r.kod=? 
         ORDER BY r.perc DESC, r.timestamp ASC
-        """,
-        (kod,), fetch="all"
+        """, (kod,), fetch="all"
     )
 
-    total_questions = len(normalize_answers(test['javoblar']))
-    
     text = (
-        f"🏆 <b>TEST NATIJALARI (LEADERBOARD)</b>\n"
-        f"{Assets.D_LINE}\n"
-        f"📖 Fan: <b>{escape(test['title'])}</b>\n"
+        f"🏆 <b>TEST NATIJALARI</b>\n"
+        f"📖 Fan: <b>{test['title']}</b>\n"
         f"🔑 Kod: <code>{kod}</code>\n"
-        f"🔢 Savollar soni: <b>{total_questions} ta</b>\n"
-        f"👥 Ishlaganlar soni: <b>{len(results)} ta o'quvchi</b>\n"
-        f"{Assets.S_LINE}\n\n"
+        f"{Assets.D_LINE}\n\n"
     )
 
     if not results:
-        text += "<i>📭 Hozircha bu testni hech kim ishlamagan.</i>"
+        text += "<i>📭 Hozircha hech kim ishlamagan.</i>"
     else:
-        for i, r in enumerate(results, 1):
-            # O'rinlarga qarab chiroyli emojilar
-            if i == 1: medal = "🥇"
-            elif i == 2: medal = "🥈"
-            elif i == 3: medal = "🥉"
-            else: medal = f"<b>{i}.</b>"
-            
-            dt_obj = datetime.fromisoformat(r['timestamp'])
-            time_str = dt_obj.strftime("%d.%m.%Y %H:%M")
-
-            text += (
-                f"{medal} <b>{escape(r['fullname'])}</b>\n"
-                f"   └ 🎯 Natija: <b>{r['ball']}/{r['total']}</b> (<b>{r['perc']:.1f}%</b>) | 🕒 <i>{time_str}</i>\n"
-            )
-
-    # Xabar uzun bo'lib ketsa Telegram xato bermasligi uchun qisqartirish (ixtiyoriy, 4000 belgidan oshmasligi kerak)
-    if len(text) > 4000:
-        text = text[:3900] + "\n\n<i>... (Ro'yxat juda uzun, qolganlari kesildi)</i>"
+        for i, r in enumerate(results[:50], 1): # Top 50 talik
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"<b>{i}.</b>"
+            text += f"{medal} <b>{escape(r['fullname'])}</b> - {r['ball']}/{r['total']} ({r['perc']:.1f}%)\n"
 
     kb = InlineKeyboardBuilder()
-    kb.row(InlineKeyboardButton(text="⬅️ Umumiy statistikaga qaytish", callback_data="back_to_main_stats"))
-
+    kb.row(InlineKeyboardButton(text="⬅️ Orqaga", callback_data="back_to_main_stats"))
     await call.message.edit_text(text, reply_markup=kb.as_markup(), parse_mode="HTML")
-    await call.answer()
-
 
 @dp.callback_query(F.data == "back_to_main_stats")
-async def adm_back_to_main_stats(call: CallbackQuery):
-    if call.from_user.id != Assets.ADMIN_ID:
-        return
-    
+async def adm_back_to_stats(call: CallbackQuery):
     text, markup = await get_stats_main_menu()
     await call.message.edit_text(text, reply_markup=markup, parse_mode="HTML")
-    await call.answer()
-    @dp.message(Form.adm_daily_test)
-async def adm_save_daily(message: Message, state: FSMContext):
-    if message.from_user.id != Assets.ADMIN_ID:
-        return
 
-    # Kirish formatini tekshirish (Masalan: Test nomi # a#b#c)
-    if "#" not in message.text:
-        return await message.answer("❌ Format noto'g'ri!\nNamuna: <code>Matematika # a#b#c</code>", parse_mode="HTML")
+# ==========================================================================================
+# 📅 2. KUNLIK STATISTIKA (FAQAT BUGUNGI)
+# ==========================================================================================
 
-    parts = message.text.split("#")
-    title = parts[0].strip()
-    answers = "#".join(parts[1:]).strip().lower()
-
-    # --- MUHIM: ESKI NATIJALARNI O'CHIRISH ---
-    # Yangi kunlik test qo'shilayotgani uchun 'daily' kodli barcha natijalarni bazadan o'chiramiz
-    DB.run("DELETE FROM results WHERE kod = 'daily'")
-    
-    # Eskidan qolgan daily testning o'zini ham yangilaymiz
-    DB.run("DELETE FROM tests WHERE kod = 'daily'")
-    DB.run(
-        "INSERT INTO tests (kod, title, javoblar, created_at) VALUES (?, ?, ?, ?)",
-        ("daily", title, answers, datetime.now().isoformat())
-    )
-
-    await state.clear()
-    await message.answer(
-        f"✅ <b>Kunlik test muvaffaqiyatli yangilandi!</b>\n"
-        f"{Assets.D_LINE}\n"
-        f"📖 Fan: <b>{title}</b>\n"
-        f"🗑 <b>Eski statistika tozalab tashlandi.</b>\n"
-        f"🚀 Endi foydalanuvchilar yangi testni ishlashlari mumkin.", 
-        reply_markup=UI.admin_menu(), 
-        parse_mode="HTML"
-    )
-    @dp.message(F.text == Assets.ADM_DAILY_STATS)
-async def adm_daily_stats_view(message: Message):
+@dp.message(F.text == Assets.ADM_DAILY_STATS)
+async def adm_daily_leaderboard(message: Message):
     if message.from_user.id != Assets.ADMIN_ID: return
 
     results = DB.run(
@@ -1115,102 +1051,78 @@ async def adm_daily_stats_view(message: Message):
         """, fetch="all"
     )
 
-    text = (
-        f"📅 <b>KUNLIK TEST REYTINGI (HOZIRGI)</b>\n"
-        f"{Assets.D_LINE}\n"
-    )
+    text = f"📅 <b>BUGUNGI KUNLIK TEST REYTINGI</b>\n{Assets.D_LINE}\n"
 
     if not results:
-        text += "<i>📭 Hozircha yangi test natijalari yo'q.</i>"
+        text += "<i>📭 Hozircha yangi kunlik test bo'yicha natijalar yo'q.</i>"
     else:
-        text += f"👥 Jami ishlaganlar: <b>{len(results)} ta</b>\n\n"
+        text += f"👥 Jami: <b>{len(results)} ta o'quvchi</b>\n\n"
         for i, r in enumerate(results, 1):
-            icon = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "🔹"
-            text += (
-                f"{icon} <b>{escape(r['fullname'])}</b>\n"
-                f"   └ 🎯 Natija: <b>{r['ball']}/{r['total']}</b> (<b>{r['perc']:.1f}%</b>)\n"
-            )
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "🔹"
+            text += f"{medal} <b>{escape(r['fullname'])}</b> - {r['ball']}/{r['total']} ({r['perc']:.1f}%)\n"
 
     await message.answer(text, parse_mode="HTML")
+
 # ==========================================================================================
-# 📢 OMMAVIY XABAR YUBORISH (BROADCAST)
+# ⚙️ 3. KUNLIK TESTNI YANGILASH (ESKI NATIJALARNI O'CHIRISH BILAN)
 # ==========================================================================================
+
+@dp.message(Form.adm_daily_test)
+async def adm_save_daily(message: Message, state: FSMContext):
+    if message.from_user.id != Assets.ADMIN_ID: return
+
+    if "#" not in message.text:
+        return await message.answer("❌ Format xato! Namuna: Ona tili # a#b#c")
+
+    parts = message.text.split("#")
+    title = parts[0].strip()
+    answers = "#".join(parts[1:]).strip().lower()
+
+    # Yangi kunlik test qo'shilganda eski 'daily' natijalarni o'chirib yuboramiz
+    DB.run("DELETE FROM results WHERE kod = 'daily'")
+    DB.run("DELETE FROM tests WHERE kod = 'daily'")
+    
+    DB.run(
+        "INSERT INTO tests (kod, title, javoblar, created_at) VALUES (?, ?, ?, ?)",
+        ("daily", title, answers, datetime.now().isoformat())
+    )
+
+    await state.clear()
+    await message.answer(f"✅ <b>Kunlik test yangilandi!</b>\n🗑 Eski statistika tozalandi.", reply_markup=UI.admin_menu())
+
+# ==========================================================================================
+# 📢 4. OMMAVIY XABAR YUBORISH (DIZAYN BILAN)
+# ==========================================================================================
+
 @dp.message(F.text == Assets.ADM_BROADCAST)
 async def broadcast_start(message: Message, state: FSMContext):
-    if message.from_user.id != Assets.ADMIN_ID:
-        return
-        
+    if message.from_user.id != Assets.ADMIN_ID: return
     await state.set_state(Form.adm_broadcast)
-    await message.answer(
-        f"<b>{Assets.S_LINE}</b>\n"
-        f"📢 <b>OMMAVIY XABAR YUBORISH</b>\n"
-        f"<b>{Assets.S_LINE}</b>\n\n"
-        f"Barcha foydalanuvchilarga yubormoqchi bo'lgan xabaringizni kiriting.\n"
-        f"<i>💡 Matn, rasm, video yoki hujjat yuborishingiz mumkin. Xabar siz yuborgan formatda hammaga boradi.</i>",
-        reply_markup=UI.back_btn(),
-        parse_mode="HTML"
-    )
+    await message.answer("📝 <b>Barchaga yuboriladigan xabarni kiriting:</b>", reply_markup=UI.back_btn())
 
 @dp.message(Form.adm_broadcast)
 async def broadcast_send(message: Message, state: FSMContext):
-    if message.from_user.id != Assets.ADMIN_ID:
-        return
-
-    # Bekor qilish tugmasi bosilsa
     if message.text == Assets.ICO_BACK:
         await state.clear()
-        return await message.answer("🚫 Xabar yuborish bekor qilindi.", reply_markup=UI.admin_menu())
+        return await message.answer("Bekor qilindi.", reply_markup=UI.admin_menu())
 
     users = DB.run("SELECT uid FROM users", fetch="all")
-    if not users:
-        await state.clear()
-        return await message.answer("📭 Tizimda foydalanuvchilar yo'q.", reply_markup=UI.admin_menu())
-
-    wait_msg = await message.answer("⏳ <i>Xabar yuborilmoqda, iltimos kutib turing...</i>")
+    await message.answer(f"⏳ Xabar yuborilmoqda...")
     
-    success = 0
-    fail = 0
-
+    sent = 0
     for u in users:
         try:
-            user_id = u['uid']
-            
-            # Agar faqat matn yozilgan bo'lsa, chiroyli dizaynga o'raymiz
             if message.text:
-                text = (
-                    f"🔔 <b>ADMINISTRATSIYADAN XABAR</b>\n"
-                    f"{Assets.D_LINE}\n"
-                    f"{message.html_text}\n"
-                    f"{Assets.D_LINE}\n"
-                    f"<i>🤖 Logos Platinum tizimi</i>"
-                )
-                await bot.send_message(user_id, text, parse_mode="HTML")
+                styled = f"🔔 <b>ADMINISTRATSIYADAN XABAR</b>\n{Assets.D_LINE}\n\n{message.html_text}\n\n{Assets.D_LINE}"
+                await bot.send_message(u['uid'], styled, parse_mode="HTML")
             else:
-                # Agar rasm/video yuborilsa, uni shundayligicha (dizaynsiz) copy qilamiz
-                await message.copy_to(user_id)
-                
-            success += 1
-        except Exception:
-            # Foydalanuvchi botni bloklagan bo'lsa xatolik beradi, shu sababli fail oshadi
-            fail += 1
-            
-        # Telegram API ni charchatib qo'ymaslik uchun kichik pauza (Anti-flood)
-        await asyncio.sleep(0.05)
+                await message.copy_to(u['uid'])
+            sent += 1
+            await asyncio.sleep(0.05)
+        except: continue
 
     await state.clear()
-    
-    # Natijani hisobot shaklida adminga qaytarish
-    report = (
-        f"✅ <b>XABAR YETKAZILDI!</b>\n"
-        f"{Assets.S_LINE}\n"
-        f"👥 Jami urunishlar: <b>{len(users)} ta</b>\n"
-        f"🟢 Yetib bordi: <b>{success} ta</b>\n"
-        f"🔴 Bloklagan/Aktiv emas: <b>{fail} ta</b>\n"
-        f"{Assets.S_LINE}"
-    )
-    
-    await wait_msg.delete()
-    await message.answer(report, reply_markup=UI.admin_menu(), parse_mode="HTML")
+    await message.answer(f"✅ Xabar {sent} ta foydalanuvchiga yetkazildi.", reply_markup=UI.admin_menu())
 # ==========================================================================================
 # MAIN
 # ==========================================================================================
