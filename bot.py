@@ -948,51 +948,125 @@ async def confirm_del(call: CallbackQuery):
     await call.answer("Test o'chirildi!", show_alert=True)
     await call.message.edit_text(f"🏁 <b>{kod}</b> kodli test tizimdan o'chirildi.")
 
+# ==========================================================================================
+# 📊 KENGAYTIRILGAN UMUMIY STATISTIKA (YANGILANGAN DIZAYN)
+# ==========================================================================================
 
-@dp.message(F.text == Assets.ADM_STATS)
-async def adm_general_stats(message: Message):
-    if message.from_user.id != Assets.ADMIN_ID:
-        return
+async def get_stats_main_menu():
+    """Umumiy statistika va testlar ro'yxatini shakllantiruvchi yordamchi funksiya"""
     u_count = DB.run("SELECT COUNT(*) as c FROM users", fetch="one")["c"]
     t_count = DB.run("SELECT COUNT(*) as c FROM tests", fetch="one")["c"]
     r_count = DB.run("SELECT COUNT(*) as c FROM results", fetch="one")["c"]
 
     res_text = (
-        f"📊 <b>UMUMIY TIZIM STATISTIKASI</b>\n"
+        f"📊 <b>TIZIMNING UMUMIY STATISTIKASI</b>\n"
         f"{Assets.D_LINE}\n"
-        f"👥 Foydalanuvchilar: <b>{u_count} ta</b>\n"
-        f"📚 Jami testlar: <b>{t_count} ta</b>\n"
-        f"📝 Jami topshirilganlar: <b>{r_count} ta</b>\n"
-        f"{Assets.S_LINE}"
+        f"👥 Jami foydalanuvchilar: <b>{u_count} ta</b>\n"
+        f"📚 Jami bazadagi testlar: <b>{t_count} ta</b>\n"
+        f"📝 Jami topshirilgan testlar: <b>{r_count} marta</b>\n"
+        f"{Assets.S_LINE}\n"
+        f"🎯 <b>Batafsil ma'lumot olish:</b>\n"
+        f"<i>Qaysi test bo'yicha ishlaganlar ro'yxatini ko'rmoqchisiz? "
+        f"Quyidagi ro'yxatdan kerakli testni tanlang 👇</i>"
     )
-    await message.answer(res_text, parse_mode="HTML")
+
+    tests = DB.run("SELECT kod, title FROM tests ORDER BY created_at DESC", fetch="all")
+    kb = InlineKeyboardBuilder()
+    
+    if tests:
+        for t in tests:
+            kb.row(InlineKeyboardButton(
+                text=f"📂 {t['title']} | Kod: {t['kod']}",
+                callback_data=f"show_stats_{t['kod']}"
+            ))
+    else:
+        kb.row(InlineKeyboardButton(text="📭 Testlar mavjud emas", callback_data="none"))
+        
+    return res_text, kb.as_markup()
 
 
-@dp.message(F.text == Assets.ADM_DAILY_STATS)
-async def adm_daily_stats(message: Message):
+@dp.message(F.text == Assets.ADM_STATS)
+async def adm_general_stats(message: Message):
     if message.from_user.id != Assets.ADMIN_ID:
         return
+    
+    text, markup = await get_stats_main_menu()
+    await message.answer(text, reply_markup=markup, parse_mode="HTML")
+
+
+@dp.callback_query(F.data.startswith("show_stats_"))
+async def adm_specific_test_stats(call: CallbackQuery):
+    if call.from_user.id != Assets.ADMIN_ID:
+        return await call.answer("Ruxsat yo'q", show_alert=True)
+
+    kod = call.data.split("_", 2)[2]
+    
+    # Test haqida ma'lumot olish
+    test = DB.run("SELECT title, javoblar FROM tests WHERE kod=?", (kod,), fetch="one")
+    if not test:
+        return await call.answer("Bunday kodli test topilmadi!", show_alert=True)
+
+    # Shu testni ishlaganlarni topish (Eng baland foiz va eng birinchi ishlaganiga qarab saralash)
     results = DB.run(
-        "SELECT u.fullname, r.ball, r.total, r.perc FROM daily_results r "
-        "JOIN users u ON r.uid = u.uid ORDER BY r.perc DESC, r.timestamp ASC",
-        fetch="all"
+        """
+        SELECT u.fullname, r.ball, r.total, r.perc, r.timestamp 
+        FROM results r 
+        JOIN users u ON r.uid = u.uid 
+        WHERE r.kod=? 
+        ORDER BY r.perc DESC, r.timestamp ASC
+        """,
+        (kod,), fetch="all"
+    )
+
+    total_questions = len(normalize_answers(test['javoblar']))
+    
+    text = (
+        f"🏆 <b>TEST NATIJALARI (LEADERBOARD)</b>\n"
+        f"{Assets.D_LINE}\n"
+        f"📖 Fan: <b>{escape(test['title'])}</b>\n"
+        f"🔑 Kod: <code>{kod}</code>\n"
+        f"🔢 Savollar soni: <b>{total_questions} ta</b>\n"
+        f"👥 Ishlaganlar soni: <b>{len(results)} ta o'quvchi</b>\n"
+        f"{Assets.S_LINE}\n\n"
     )
 
     if not results:
-        return await message.answer("📅 <b>Kunlik test bo'yicha hali natijalar yo'q.</b>", parse_mode="HTML")
+        text += "<i>📭 Hozircha bu testni hech kim ishlamagan.</i>"
+    else:
+        for i, r in enumerate(results, 1):
+            # O'rinlarga qarab chiroyli emojilar
+            if i == 1: medal = "🥇"
+            elif i == 2: medal = "🥈"
+            elif i == 3: medal = "🥉"
+            else: medal = f"<b>{i}.</b>"
+            
+            dt_obj = datetime.fromisoformat(r['timestamp'])
+            time_str = dt_obj.strftime("%d.%m.%Y %H:%M")
 
-    text = f"🏆 <b>KUNLIK TEST REYTINGI</b>\n{Assets.D_LINE}\n"
-    for i, r in enumerate(results, 1):
-        icon = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "🔹"
-        text += f"{icon} <b>{escape(r['fullname'])}</b> - {r['ball']}/{r['total']} (<b>{r['perc']:.1f}%</b>)\n"
+            text += (
+                f"{medal} <b>{escape(r['fullname'])}</b>\n"
+                f"   └ 🎯 Natija: <b>{r['ball']}/{r['total']}</b> (<b>{r['perc']:.1f}%</b>) | 🕒 <i>{time_str}</i>\n"
+            )
 
-    await message.answer(text, parse_mode="HTML")
+    # Xabar uzun bo'lib ketsa Telegram xato bermasligi uchun qisqartirish (ixtiyoriy, 4000 belgidan oshmasligi kerak)
+    if len(text) > 4000:
+        text = text[:3900] + "\n\n<i>... (Ro'yxat juda uzun, qolganlari kesildi)</i>"
+
+    kb = InlineKeyboardBuilder()
+    kb.row(InlineKeyboardButton(text="⬅️ Umumiy statistikaga qaytish", callback_data="back_to_main_stats"))
+
+    await call.message.edit_text(text, reply_markup=kb.as_markup(), parse_mode="HTML")
+    await call.answer()
 
 
-@dp.callback_query(F.data == "cancel_adm")
-async def cancel_adm(call: CallbackQuery):
-    await call.message.edit_text("🚫 <b>Amal bekor qilindi.</b>", parse_mode="HTML")
-
+@dp.callback_query(F.data == "back_to_main_stats")
+async def adm_back_to_main_stats(call: CallbackQuery):
+    if call.from_user.id != Assets.ADMIN_ID:
+        return
+    
+    text, markup = await get_stats_main_menu()
+    await call.message.edit_text(text, reply_markup=markup, parse_mode="HTML")
+    await call.answer()
 
 # ==========================================================================================
 # MAIN
