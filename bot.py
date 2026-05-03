@@ -193,7 +193,7 @@ class Form(StatesGroup):
     adm_add_daily_title = State()
     adm_add_daily_ans = State()
     adm_add_daily_file = State()
-
+    adm_broadcast = State()
 
 # ==========================================================================================
 # 🎨 UI
