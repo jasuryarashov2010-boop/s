@@ -1,9 +1,8 @@
-
 import asyncio
 import logging
 import os
 import sqlite3
-from aiohttp import web  # <--- MANA SHU SATRNI QO'SHING
+from aiohttp import web
 from datetime import datetime
 from html import escape
 from typing import Final, Any, Optional
@@ -12,18 +11,22 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command, or_f
 from aiogram.types import (
     ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton,
-    Message, CallbackQuery, BotCommand
+    Message, CallbackQuery, BotCommand, InlineKeyboardMarkup
 )
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
+from dotenv import load_dotenv
+
+# .env faylini yuklash
+load_dotenv()
+
 try:
     from groq import Groq
 except Exception:
     Groq = None
-
 
 # ==========================================================================================
 # 💎 PREMIUM KONFIGURATSIYA
