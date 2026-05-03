@@ -207,7 +207,7 @@ class UI:
             b.row(KeyboardButton(text=Assets.ICO_ADM))
         b.adjust(2, 2, 2, 1)
         return b.as_markup(resize_keyboard=True)
-@staticmethod
+    @staticmethod
     def admin_menu():
         b = ReplyKeyboardBuilder()
         b.row(KeyboardButton(text=Assets.ADM_ADD_TEST), KeyboardButton(text=Assets.ADM_ADD_DAILY))
