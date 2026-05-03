@@ -63,7 +63,7 @@ class Assets:
     ADM_STATS = "📊 Umumiy Statistika"
     ADM_DAILY_STATS = "📊 Kunlik Statistika"
     ADM_DEL_TEST = "🗑 Testni O'chirish"
-
+    ADM_BROADCAST = "📢 Barchaga Xabar"
     @staticmethod
     def progress_bar(perc: float) -> str:
         full = max(0, min(10, int(perc // 10)))
