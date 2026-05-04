@@ -45,8 +45,7 @@ class Assets:
     # ADMIN_ID doim int (son) bo'lishi kerak, shuning uchun int() ga o'raymiz
     ADMIN_ID: Final[int] = int(os.getenv("ADMIN_ID", 0))
     DB_NAME: Final[str] = os.getenv("DB_NAME", "database.db")
-    CH_ID: Final[str] = os.getenv("CH_ID") 
-    CH_LINK: Final[str] = os.getenv("CH_LINK")
+
     
     D_LINE = "<b>▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬</b>"
     S_LINE = "<b>────────────────────</b>"
@@ -265,65 +264,16 @@ def score_answers(user_ans: str, correct_ans: str):
 def get_active_daily_test():
     return DB.run("SELECT * FROM daily_tests ORDER BY id DESC LIMIT 1", fetch="one")
 
-# ==========================================================================================
-# 🔍 OBUNA TEKSHIRISH FUNKSIYASI
-# ==========================================================================================
-async def is_subscribed(user_id: int) -> bool:
-    try:
-        member = await bot.get_chat_member(chat_id=Assets.CH_ID, user_id=user_id)
-        if member.status in ["member", "administrator", "creator"]:
-            return True
-        return False
-    except Exception:
-        return False
 
-# Obuna bo'lish uchun klaviatura
-def sub_kb():
-    kb = InlineKeyboardBuilder()
-    kb.row(InlineKeyboardButton(text="📢 Kanalga a'zo bo'lish", url=Assets.CH_LINK))
-    kb.row(InlineKeyboardButton(text="✅ Tekshirish", callback_data="check_subscription"))
-    return kb.as_markup()
-    # ==========================================================================================
-# TEKSHIRISH TUGMASI UCHUN CALLBACK
-# ==========================================================================================
-@dp.callback_query(F.data == "check_subscription")
-async def check_sub_callback(call: CallbackQuery, state: FSMContext):
-    if await is_subscribed(call.from_user.id):
-        await call.answer("Rahmat! Obuna tasdiqlandi. ✅")
-        await call.message.delete()
-        # Qayta start berish
-        await global_reset(call.message, state)
-    else:
-        await call.answer("Siz hali kanalga a'zo bo'lmadingiz! ❌", show_alert=True)
-
-# ... (kodning qolgan qismi o'zgarishsiz qoladi)
 # ==========================================================================================
 # START / RESET
 # ==========================================================================================
-# ==========================================================================================
-# START / RESET (YANGILANDI)
-# ==========================================================================================
-
 @dp.message(or_f(Command("start"), F.text == Assets.ICO_HOME, F.text == Assets.ICO_BACK))
 async def global_reset(message: Message, state: FSMContext):
     await state.clear()
     DB.setup()
 
-    # 1. Avval obunani tekshiramiz
-    if not await is_subscribed(message.from_user.id):
-        return await message.answer(
-            f"👋 <b>Assalomu alaykum!</b>\n\n"
-            f"Botdan foydalanish uchun rasmiy kanalimizga a'zo bo'lishingiz kerak:",
-            reply_markup=sub_kb(),
-            parse_mode="HTML"
-        )
-
-    # 2. Agar obuna bo'lgan bo'lsa, ro'yxatdan o'tganini tekshiramiz
-    user = DB.run(
-        "SELECT * FROM users WHERE uid=?",
-        (message.from_user.id,),
-        fetch="one"
-    )
+    user = DB.run("SELECT * FROM users WHERE uid=?", (message.from_user.id,), fetch="one")
 
     if not user:
         await state.set_state(Form.reg)
@@ -336,7 +286,6 @@ async def global_reset(message: Message, state: FSMContext):
         )
         return await message.answer(text, parse_mode="HTML")
 
-    # 3. Asosiy dashboard
     dashboard = (
         f"👑 <b>ASOSIY BOSHQARUV PANELI</b>\n"
         f"{Assets.D_LINE}\n"
@@ -347,12 +296,24 @@ async def global_reset(message: Message, state: FSMContext):
         f"{Assets.S_LINE}\n"
         f"Tanlang 👇"
     )
+    await message.answer(dashboard, reply_markup=UI.main_menu(message.from_user.id), parse_mode="HTML")
 
-    await message.answer(
-        dashboard,
-        reply_markup=UI.main_menu(message.from_user.id),
-        parse_mode="HTML"
+
+@dp.message(Form.reg)
+async def registration_finish(message: Message, state: FSMContext):
+    DB.run(
+        "INSERT OR REPLACE INTO users (uid, fullname, username, joined_at) VALUES (?,?,?,?)",
+        (message.from_user.id, message.text, message.from_user.username, datetime.now().isoformat())
     )
+    await message.answer(
+        "🎉 <b>Muvaffaqiyatli ro'yxatdan o'tdingiz!</b>\n\n"
+        "Endi testlar, kunlik test va AI xizmatlaridan foydalana olasiz.",
+        parse_mode="HTML",
+        reply_markup=UI.main_menu(message.from_user.id)
+    )
+    await state.clear()
+
+
 # ==========================================================================================
 # TESTLAR
 # ==========================================================================================
