@@ -300,6 +300,10 @@ async def check_sub_callback(call: CallbackQuery, state: FSMContext):
 # ==========================================================================================
 # START / RESET
 # ==========================================================================================
+# ==========================================================================================
+# START / RESET (YANGILANDI)
+# ==========================================================================================
+
 @dp.message(or_f(Command("start"), F.text == Assets.ICO_HOME, F.text == Assets.ICO_BACK))
 async def global_reset(message: Message, state: FSMContext):
     await state.clear()
@@ -313,7 +317,13 @@ async def global_reset(message: Message, state: FSMContext):
             reply_markup=sub_kb(),
             parse_mode="HTML"
         )
-   user = DB.run("SELECT * FROM users WHERE uid=?", (message.from_user.id,), fetch="one")
+
+    # 2. Agar obuna bo'lgan bo'lsa, ro'yxatdan o'tganini tekshiramiz
+    user = DB.run(
+        "SELECT * FROM users WHERE uid=?",
+        (message.from_user.id,),
+        fetch="one"
+    )
 
     if not user:
         await state.set_state(Form.reg)
@@ -326,6 +336,7 @@ async def global_reset(message: Message, state: FSMContext):
         )
         return await message.answer(text, parse_mode="HTML")
 
+    # 3. Asosiy dashboard
     dashboard = (
         f"👑 <b>ASOSIY BOSHQARUV PANELI</b>\n"
         f"{Assets.D_LINE}\n"
@@ -336,24 +347,12 @@ async def global_reset(message: Message, state: FSMContext):
         f"{Assets.S_LINE}\n"
         f"Tanlang 👇"
     )
-    await message.answer(dashboard, reply_markup=UI.main_menu(message.from_user.id), parse_mode="HTML")
 
-
-@dp.message(Form.reg)
-async def registration_finish(message: Message, state: FSMContext):
-    DB.run(
-        "INSERT OR REPLACE INTO users (uid, fullname, username, joined_at) VALUES (?,?,?,?)",
-        (message.from_user.id, message.text, message.from_user.username, datetime.now().isoformat())
-    )
     await message.answer(
-        "🎉 <b>Muvaffaqiyatli ro'yxatdan o'tdingiz!</b>\n\n"
-        "Endi testlar, kunlik test va AI xizmatlaridan foydalana olasiz.",
-        parse_mode="HTML",
-        reply_markup=UI.main_menu(message.from_user.id)
+        dashboard,
+        reply_markup=UI.main_menu(message.from_user.id),
+        parse_mode="HTML"
     )
-    await state.clear()
-
-
 # ==========================================================================================
 # TESTLAR
 # ==========================================================================================
