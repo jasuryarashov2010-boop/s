@@ -2,6 +2,8 @@ import asyncio
 import logging
 import os
 import sqlite3
+import random
+import html
 from aiogram import Bot, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
@@ -59,6 +61,7 @@ class Assets:
 
     ICO_TEST = "🧩 Testlar Markazi"
     ICO_CHECK = "📝 Test Topshirish"
+    ICO_TEST = "✔️Ro'yhatdan o'tish"
     ICO_DAILY = "📅 Kunlik test"
     ICO_AI = "🤖 AI Mentor (Premium)"
     ICO_HIS = "📈 Natijalarim"
@@ -371,22 +374,34 @@ async def check_sub_handler(call: CallbackQuery, state: FSMContext, bot: Bot):
     await process_user_entry(call.message, state, call.from_user.id, call.from_user.first_name)
 
 # ==========================================================================================
-# RO'YXATDAN O'TISHNI YAKUNLASH
+# RO'YXATDAN O'TISHNI YAKUNLASH VA ID BERISH
 # ==========================================================================================
 @dp.message(Form.reg)
 async def registration_finish(message: Message, state: FSMContext):
-    # Ismni bazaga yozish
+    # Agar orqaga tugmasi bosilsa xolatni bekor qilish
+    if message.text == Assets.ICO_BACK:
+        await state.clear()
+        await message.answer("🏠 Asosiy menyu", reply_markup=UI.main_menu(message.from_user.id))
+        return
+
+    fullname = message.text.strip()
+    
+    # Sayt uchun tasodifiy 6 xonali ID yaratish
+    import random
+    site_id = random.randint(100000, 999999)
+    
+    # Ma'lumotlarni bazaga yozish (site_id ustuni bilan)
     DB.run(
-        "INSERT OR REPLACE INTO users (uid, fullname, username, joined_at) VALUES (?,?,?,?)",
-        (message.from_user.id, message.text, message.from_user.username, datetime.now().isoformat())
+        "INSERT OR REPLACE INTO users (uid, fullname, username, site_id, joined_at) VALUES (?,?,?,?,?)",
+        (message.from_user.id, fullname, message.from_user.username, site_id, datetime.now().isoformat())
     )
     
     success_text = (
         f"🎉 <b>Muvaffaqiyatli ro'yxatdan o'tdingiz!</b>\n"
-        f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"Hurmatli <b>{html.escape(message.text)}</b>, tizimga xush kelibsiz! 🚀\n"
-        f"Endi testlar, kunlik vazifalar va AI xizmatlaridan to'liq foydalana olasiz.\n\n"
-        f"👇 <i>Quyidagi menyudan kerakli bo'limni tanlang:</i>"
+        f"{Assets.D_LINE}\n\n"
+        f"👤 Ism-Familiya: <b>{html.escape(fullname)}</b>\n"
+        f"🔑 <b>Sayt uchun maxsus ID:</b> <code>{site_id}</code>\n\n"
+        f"ℹ专 <i>Saytga kirib, ushbu ID kodni ishlating. Uni xavfsiz saqlang!</i>"
     )
     
     await message.answer(
@@ -395,7 +410,6 @@ async def registration_finish(message: Message, state: FSMContext):
         reply_markup=UI.main_menu(message.from_user.id)
     )
     await state.clear()
-
 # ==========================================================================================
 # TESTLAR
 # ==========================================================================================
@@ -501,7 +515,19 @@ async def test_logic(message: Message, state: FSMContext):
     )
     await message.answer(res_msg, reply_markup=UI.main_menu(message.from_user.id), parse_mode="HTML")
     await state.clear()
-
+# ==========================================================================================
+# RO'YXATDAN O'TISH TUGMASI (ICO_TEST) BOSILGANDA
+# ==========================================================================================
+@dp.message(F.text == Assets.ICO_TEST)
+async def start_registration_from_menu(message: Message, state: FSMContext):
+    await state.set_state(Form.reg)
+    text = (
+        f"✍️ <b>SAYT UCHUN RO'YXATDAN O'TISH</b>\n"
+        f"{Assets.S_LINE}\n\n"
+        f"Iltimos, ism va familiyangizni kiriting:\n\n"
+        f"💡 <b>Namuna:</b> <i>Aliyev Vali</i>"
+    )
+    await message.answer(text, reply_markup=UI.back_btn(), parse_mode="HTML")
 
 # ==========================================================================================
 # KUNLIK TEST
