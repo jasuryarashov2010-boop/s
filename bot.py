@@ -291,7 +291,7 @@ def get_active_daily_test():
 # SOZLAMALAR: Majburiy kanallar ro'yxati (Bot bu kanallarda ADMIN bo'lishi shart!)
 # ==========================================================================================
 REQUIRED_CHANNELS = [
-    {"name": "📢 Asosiy Kanal", "id": "@alo_math"},
+    {"name": "📢 Asosiy Kanal", "id": "@matematika_999"},
 
 ]
 
