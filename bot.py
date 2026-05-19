@@ -337,10 +337,11 @@ async def process_user_entry(message: Message, state: FSMContext, user_id: int, 
         )
         await message.answer(text, parse_mode="HTML")
     else:
-        dashboard = (
+     dashboard = (
             f"👑 <b>ASOSIY BOSHQARUV PANELI</b>\n"
             f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
             f"👤 Foydalanuvchi: <b>{html.escape(user['fullname'])}</b>\n"
+            f"🆔 Tizim ID (Veb-sayt uchun): <code>{user_id}</code>\n"
             f"🎖 Status: <b>Premium A'zo</b> 💎\n\n"
             f"📅 Sana: <b>{datetime.now().strftime('%d.%m.%Y')}</b>\n"
             f"🕒 Vaqt: <b>{datetime.now().strftime('%H:%M')}</b>\n\n"
@@ -395,11 +396,12 @@ async def registration_finish(message: Message, state: FSMContext):
         "INSERT OR REPLACE INTO users (uid, fullname, username, joined_at) VALUES (?,?,?,?)",
         (message.from_user.id, message.text, message.from_user.username, datetime.now().isoformat())
     )
-    
+  # registration_finish funksiyasi ichidagi success_text xabarini shunday o'zgartiring:
     success_text = (
         f"🎉 <b>Muvaffaqiyatli ro'yxatdan o'tdingiz!</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"Hurmatli <b>{html.escape(message.text)}</b>, tizimga xush kelibsiz! 🚀\n"
+        f"Hurmatli <b>{html.escape(message.text)}</b>, tizimga xush kelibsiz! 🚀\n\n"
+        f"🌐 <b>VEB-SAYT UCHUN TIZIM ID:</b> <code>{message.from_user.id}</code>\n\n"
         f"Endi testlar, kunlik vazifalar va AI xizmatlaridan to'liq foydalana olasiz.\n\n"
         f"👇 <i>Quyidagi menyudan kerakli bo'limni tanlang:</i>"
     )
@@ -1131,18 +1133,70 @@ async def confirm_del(call: CallbackQuery):
     await call.message.edit_text(f"🏁 <b>{kod}</b> kodli test tizimdan o'chirildi.")
 
 # ==========================================================================================
-# MAIN
+# MAIN VA API QISMI
 # ==========================================================================================
-# Render uchun kichik veb-server (Health Check)
+import json
+from aiohttp import web
+
+# Saytdan kelgan so'rovlarni tekshiradigan API Endpoint
+async def api_login(request):
+    # CORS muammosini hal qilish (Sayt server bilan muammosiz gaplashishi uchun)
+    if request.method == 'OPTIONS':
+        return web.Response(headers={
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type',
+        })
+    
+    try:
+        data = await request.json()
+        student_id = data.get("student_id", "").strip()
+        
+        # 1. Telegram ID orqali users jadvalidan qidiramiz
+        user = DB.run("SELECT * FROM users WHERE uid=?", (student_id,), fetch="one")
+        
+        if not user:
+            # 2. Agar yo'q bo'lsa, web_users jadvalidan qidiramiz (Tizim ID orqali)
+            web_user = DB.run("SELECT * FROM web_users WHERE web_username=?", (student_id,), fetch="one")
+            if web_user:
+                u = DB.run("SELECT * FROM users WHERE uid=?", (web_user['uid'],), fetch="one")
+                if u:
+                    return web.json_response({
+                        "success": True, 
+                        "name": u["fullname"], 
+                        "role": "admin" if u["uid"] == Assets.ADMIN_ID else "user"
+                    }, headers={'Access-Control-Allow-Origin': '*'})
+                    
+            # Foydalanuvchi bazada topilmadi
+            return web.json_response({
+                "success": False, 
+                "error": "Tizim ID bazada topilmadi! Iltimos, Telegram botdan ro'yxatdan o'ting."
+            }, status=400, headers={'Access-Control-Allow-Origin': '*'})
+
+        # Foydalanuvchi bazada topildi
+        return web.json_response({
+            "success": True,
+            "name": user["fullname"],
+            "role": "admin" if user["uid"] == Assets.ADMIN_ID else "user"
+        }, headers={'Access-Control-Allow-Origin': '*'})
+
+    except Exception as e:
+        return web.json_response({"success": False, "error": str(e)}, status=500, headers={'Access-Control-Allow-Origin': '*'})
+
 async def handle(request):
-    return web.Response(text="Bot is running!")
+    return web.Response(text="Bot and API are running!")
 
 async def main():
     DB.setup()
     
-    # Veb-serverni ishga tushirish
+    # Veb-serverni sozlash
     app = web.Application()
     app.router.add_get("/", handle)
+    
+    # Yangi API endpointlarni ulash
+    app.router.add_options("/api/login", api_login)
+    app.router.add_post("/api/login", api_login)
+    
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", int(os.getenv("PORT", 8080)))
@@ -1152,7 +1206,7 @@ async def main():
         BotCommand(command="start", description="🏠 Asosiy menyu")
     ])
     
-    print("💎 LOGOS PLATINUM V4.8 IS RUNNING...")
+    print("💎 LOGOS PLATINUM  IS RUNNING (WEB API ACTIVE)...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
