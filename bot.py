@@ -347,7 +347,7 @@ async def process_user_entry(message: Message, state: FSMContext, user_id: int, 
             f"🕒 Vaqt: <b>{datetime.now().strftime('%H:%M')}</b>\n\n"
             f"👇 <i>Kerakli bo'limni tanlang:</i>"
         )
-        await message.answer(dashboard, reply_markup=UI.main_menu(user_id), parse_mode="HTML")
+     await message.answer(dashboard, reply_markup=UI.main_menu(user_id), parse_mode="HTML")
 
 # ==========================================================================================
 # START / RESET HANDLER
